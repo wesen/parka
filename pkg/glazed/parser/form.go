@@ -9,7 +9,7 @@ import (
 )
 
 type FormParseStep struct {
-	onlyDefined bool
+	onlyProvided bool
 }
 
 func (f *FormParseStep) ParseLayerState(c *gin.Context, state *LayerParseState) error {
@@ -32,7 +32,7 @@ func (f *FormParseStep) ParseLayerState(c *gin.Context, state *LayerParseState) 
 			if p.Required {
 				return fmt.Errorf("required parameter '%s' is missing", p.Name)
 			}
-			if !f.onlyDefined {
+			if !f.onlyProvided {
 				if _, ok := state.Parameters[p.Name]; !ok {
 					if p.Type == parameters.ParameterTypeDate {
 						switch v := p.Default.(type) {
@@ -99,8 +99,8 @@ func (f *FormParseStep) Parse(c *gin.Context, state *LayerParseState) error {
 	return nil
 }
 
-func NewFormParseStep(onlyDefined bool) *FormParseStep {
+func NewFormParseStep(onlyProvided bool) *FormParseStep {
 	return &FormParseStep{
-		onlyDefined: onlyDefined,
+		onlyProvided: onlyProvided,
 	}
 }

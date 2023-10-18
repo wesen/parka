@@ -1,18 +1,23 @@
 package command
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-go-golems/glazed/pkg/cmds"
 	"github.com/go-go-golems/glazed/pkg/cmds/alias"
 	"github.com/go-go-golems/glazed/pkg/cmds/loaders"
+	"github.com/go-go-golems/parka/pkg/glazed/handlers/api/json"
+	"github.com/go-go-golems/parka/pkg/glazed/handlers/api/sse"
+	"github.com/go-go-golems/parka/pkg/glazed/handlers/api/text"
 	"github.com/go-go-golems/parka/pkg/glazed/handlers/datatables"
-	"github.com/go-go-golems/parka/pkg/glazed/handlers/json"
 	output_file "github.com/go-go-golems/parka/pkg/glazed/handlers/output-file"
+	parser2 "github.com/go-go-golems/parka/pkg/glazed/parser"
 	"github.com/go-go-golems/parka/pkg/handlers/config"
 	"github.com/go-go-golems/parka/pkg/render"
 	parka "github.com/go-go-golems/parka/pkg/server"
 	"github.com/pkg/errors"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -26,7 +31,7 @@ type CommandHandler struct {
 	TemplateLookup render.TemplateLookup
 
 	// can be any of BareCommand, WriterCommand or GlazeCommand
-	Command cmds.GlazeCommand
+	Command cmds.Command
 
 	// AdditionalData is passed to the template being rendered.
 	AdditionalData map[string]interface{}
@@ -252,22 +257,79 @@ func NewCommandHandlerFromConfig(
 	return c, nil
 }
 
+func HandleData(command cmds.Command, c *gin.Context, parserOptions ...parser2.ParserOption) {
+	// TODO(manuel, 2023-10-16) Unify with command.go
+	switch v := command.(type) {
+	case cmds.GlazeCommand:
+		json.CreateJSONQueryHandler(v, parserOptions...)(c)
+	default:
+		text.CreateQueryHandler(v, parserOptions...)(c)
+	}
+}
+
+func HandleText(command cmds.Command, c *gin.Context, parserOptions ...parser2.ParserOption) {
+	text.CreateQueryHandler(command, parserOptions...)(c)
+}
+
+func HandleStream(command cmds.Command, c *gin.Context, parserOptions ...parser2.ParserOption) {
+	sse.CreateQueryHandler(command, parserOptions...)(c)
+}
+
+func HandleDownload(command cmds.Command, fileName string, c *gin.Context, parserOptions ...parser2.ParserOption) {
+	switch v := command.(type) {
+	case cmds.GlazeCommand:
+		output_file.CreateGlazedFileHandler(
+			v,
+			fileName,
+			parserOptions...,
+		)(c)
+
+	case cmds.WriterCommand:
+		handler := text.NewQueryHandler(command)
+
+		baseName := filepath.Base(fileName)
+		c.Writer.Header().Set("Content-Disposition", "attachment; filename="+baseName)
+
+		err := handler.Handle(c, c.Writer)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+	default:
+		c.JSON(500, gin.H{"error": fmt.Sprintf("command %s is not a glazed/writer command", command.Description().Name)})
+	}
+}
+
 func (ch *CommandHandler) Serve(server *parka.Server, path string) error {
 	path = strings.TrimSuffix(path, "/")
 
+	parserOptions := ch.OverridesAndDefaults.ComputeParserOptions(ch.Stream)
+
 	server.Router.GET(path+"/data", func(c *gin.Context) {
-		json.CreateJSONQueryHandler(ch.Command)(c)
+		HandleData(ch.Command, c, parserOptions...)
 	})
-	server.Router.GET(path+"/glazed", func(c *gin.Context) {
-		options := []datatables.QueryHandlerOption{
-			datatables.WithParserOptions(ch.OverridesAndDefaults.ComputeParserOptions(ch.Stream)...),
-			datatables.WithTemplateLookup(ch.TemplateLookup),
-			datatables.WithTemplateName(ch.TemplateName),
-			datatables.WithAdditionalData(ch.AdditionalData),
-			datatables.WithStreamRows(ch.Stream),
+	server.Router.GET(path+"/text", func(c *gin.Context) {
+		HandleText(ch.Command, c, parserOptions...)
+	})
+	server.Router.GET(path+"/streaming", func(c *gin.Context) {
+		HandleStream(ch.Command, c, parserOptions...)
+	})
+	server.Router.GET(path+"/datatables", func(c *gin.Context) {
+		switch v := ch.Command.(type) {
+		case cmds.GlazeCommand:
+			options := []datatables.QueryHandlerOption{
+				datatables.WithParserOptions(parserOptions...),
+				datatables.WithTemplateLookup(ch.TemplateLookup),
+				datatables.WithTemplateName(ch.TemplateName),
+				datatables.WithAdditionalData(ch.AdditionalData),
+				datatables.WithStreamRows(ch.Stream),
+			}
+			datatables.CreateDataTablesHandler(v, path, "", options...)(c)
+		default:
+			c.JSON(500, gin.H{"error": fmt.Sprintf("command %s is not a glazed command", ch.Command.Description().Name)})
 		}
 
-		datatables.CreateDataTablesHandler(ch.Command, path, "", options...)(c)
 	})
 	server.Router.GET(path+"/download/*path", func(c *gin.Context) {
 		path_ := c.Param("path")
@@ -283,13 +345,7 @@ func (ch *CommandHandler) Serve(server *parka.Server, path string) error {
 		}
 		fileName := path_[index+1:]
 
-		parserOptions := ch.OverridesAndDefaults.ComputeParserOptions(ch.Stream)
-
-		output_file.CreateGlazedFileHandler(
-			ch.Command,
-			fileName,
-			parserOptions...,
-		)(c)
+		HandleDownload(ch.Command, fileName, c, parserOptions...)
 	})
 
 	return nil

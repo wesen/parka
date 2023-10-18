@@ -7,16 +7,13 @@ import (
 	"github.com/go-go-golems/clay/pkg/repositories/fs"
 	"github.com/go-go-golems/glazed/pkg/cmds"
 	"github.com/go-go-golems/parka/pkg/glazed/handlers/datatables"
-	"github.com/go-go-golems/parka/pkg/glazed/handlers/json"
-	output_file "github.com/go-go-golems/parka/pkg/glazed/handlers/output-file"
-	"github.com/go-go-golems/parka/pkg/glazed/handlers/sse"
-	"github.com/go-go-golems/parka/pkg/glazed/handlers/text"
+	"github.com/go-go-golems/parka/pkg/glazed/handlers/writer"
+	command2 "github.com/go-go-golems/parka/pkg/handlers/command"
 	"github.com/go-go-golems/parka/pkg/handlers/config"
 	"github.com/go-go-golems/parka/pkg/render"
 	parka "github.com/go-go-golems/parka/pkg/server"
 	"github.com/pkg/errors"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -30,6 +27,7 @@ type CommandDirHandler struct {
 	// command indexes. Leave empty to not render index pages at all.
 	IndexTemplateName string
 	// TemplateLookup is used to look up both TemplateName and IndexTemplateName
+	// TODO(manuel, 2023-10-17) Passing a single template lookup to the entire dir might be a bit weird, since we have datatables.tmpl.html and writer templates
 	TemplateLookup render.TemplateLookup
 
 	// Repository is the command repository that is exposed over HTTP through this handler.
@@ -225,12 +223,7 @@ func (cd *CommandDirHandler) Serve(server *parka.Server, path string) error {
 			return
 		}
 
-		switch v := command.(type) {
-		case cmds.GlazeCommand:
-			json.CreateJSONQueryHandler(v)(c)
-		default:
-			text.CreateQueryHandler(v)(c)
-		}
+		command2.HandleData(command, c)
 	})
 
 	// Redirect Route
@@ -254,7 +247,7 @@ func (cd *CommandDirHandler) Serve(server *parka.Server, path string) error {
 			return
 		}
 
-		text.CreateQueryHandler(command, parserOptions...)(c)
+		command2.HandleText(command, c, parserOptions...)
 	})
 
 	server.Router.GET(path+"/streaming/*path", func(c *gin.Context) {
@@ -266,8 +259,35 @@ func (cd *CommandDirHandler) Serve(server *parka.Server, path string) error {
 			return
 		}
 
-		sse.CreateQueryHandler(command, parserOptions...)(c)
+		command2.HandleStream(command, c, parserOptions...)
 	})
+
+	server.Router.GET(path+"/writer/*path",
+		func(c *gin.Context) {
+			commandPath := c.Param("path")
+			commandPath = strings.TrimPrefix(commandPath, "/")
+
+			// Get repository command
+			command, ok := getRepositoryCommand(c, cd.Repository, commandPath)
+			if !ok {
+				c.JSON(404, gin.H{"error": fmt.Sprintf("command %s not found", commandPath)})
+				return
+			}
+
+			switch v := command.(type) {
+			case cmds.WriterCommand:
+				options := []writer.QueryHandlerOption{
+					writer.WithParserOptions(parserOptions...),
+					writer.WithTemplateLookup(cd.TemplateLookup),
+					writer.WithTemplateName(cd.TemplateName),
+					writer.WithAdditionalData(cd.AdditionalData),
+				}
+
+				writer.CreateHandler(v, path, commandPath, options...)(c)
+			default:
+				c.JSON(500, gin.H{"error": fmt.Sprintf("command %s is not a writer command", commandPath)})
+			}
+		})
 
 	server.Router.GET(path+"/datatables/*path",
 		func(c *gin.Context) {
@@ -280,6 +300,7 @@ func (cd *CommandDirHandler) Serve(server *parka.Server, path string) error {
 				c.JSON(404, gin.H{"error": fmt.Sprintf("command %s not found", commandPath)})
 				return
 			}
+
 			switch v := command.(type) {
 			case cmds.GlazeCommand:
 				options := []datatables.QueryHandlerOption{
@@ -317,29 +338,7 @@ func (cd *CommandDirHandler) Serve(server *parka.Server, path string) error {
 			return
 		}
 
-		switch v := command.(type) {
-		case cmds.GlazeCommand:
-			output_file.CreateGlazedFileHandler(
-				v,
-				fileName,
-				parserOptions...,
-			)(c)
-
-		case cmds.WriterCommand:
-			handler := text.NewQueryHandler(command)
-
-			baseName := filepath.Base(fileName)
-			c.Writer.Header().Set("Content-Disposition", "attachment; filename="+baseName)
-
-			err := handler.Handle(c, c.Writer)
-			if err != nil {
-				c.JSON(500, gin.H{"error": err.Error()})
-				return
-			}
-
-		default:
-			c.JSON(500, gin.H{"error": fmt.Sprintf("command %s is not a glazed/writer command", commandPath)})
-		}
+		command2.HandleDownload(command, fileName, c, parserOptions...)
 	})
 
 	return nil

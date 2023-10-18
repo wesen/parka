@@ -29,8 +29,8 @@ func createGinContextWithQueryValues(value map[string]string) *gin.Context {
 	}
 }
 
-func TestEmptyQueryOnlyDefined(t *testing.T) {
-	ps := NewQueryParseStep(true)
+func TestEmptyQueryonlyProvided(t *testing.T) {
+	ps := NewQueryParseStep(true, false)
 
 	parameterDefinitions, _ := parameters.LoadParameterDefinitionsFromYAML(queryYAML)
 	state := &LayerParseState{
@@ -49,7 +49,7 @@ func TestEmptyQueryOnlyDefined(t *testing.T) {
 }
 
 func TestEmptyQuery(t *testing.T) {
-	ps := NewQueryParseStep(false)
+	ps := NewQueryParseStep(false, false)
 
 	parameterDefinitions, _ := parameters.LoadParameterDefinitionsFromYAML(queryYAML)
 	state := &LayerParseState{

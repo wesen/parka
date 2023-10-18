@@ -135,21 +135,21 @@ func NewPrepopulatedParsedLayersContextMiddleware(
 	}
 }
 
-func NewCommandQueryParser(cmd cmds.Command, options ...parser.ParserOption) *parser.Parser {
+func NewCommandQueryParser(cmd cmds.Command, onlyProvided bool, ignoreRequired bool, options ...parser.ParserOption) *parser.Parser {
 	d := cmd.Description()
 
 	// NOTE(manuel, 2023-06-21) We could pass the parser options here, but then we wouldn't be able to
 	// override the layer parser. Or we could pass the QueryParsers right here.
 	ph := parser.NewParser()
 	ph.Parsers = []parser.ParseStep{
-		parser.NewQueryParseStep(false),
+		parser.NewQueryParseStep(onlyProvided, ignoreRequired),
 	}
 
 	// NOTE(manuel, 2023-04-16) API design: we would probably like to hide layers right here in the handler constructor
 	for _, l := range d.Layers {
 		slug := l.GetSlug()
 		ph.LayerParsersBySlug[slug] = []parser.ParseStep{
-			parser.NewQueryParseStep(false),
+			parser.NewQueryParseStep(onlyProvided, ignoreRequired),
 		}
 	}
 
@@ -160,19 +160,19 @@ func NewCommandQueryParser(cmd cmds.Command, options ...parser.ParserOption) *pa
 	return ph
 }
 
-func NewCommandFormParser(cmd cmds.Command, options ...parser.ParserOption) *parser.Parser {
+func NewCommandFormParser(cmd cmds.Command, onlyProvided bool, options ...parser.ParserOption) *parser.Parser {
 	d := cmd.Description()
 
 	ph := parser.NewParser()
 	ph.Parsers = []parser.ParseStep{
-		parser.NewFormParseStep(false),
+		parser.NewFormParseStep(onlyProvided),
 	}
 
 	// TODO(manuel, 2023-06-21) This is probably not necessary if the FormParseStep handles layers by itself
 	for _, l := range d.Layers {
 		slug := l.GetSlug()
 		ph.LayerParsersBySlug[slug] = []parser.ParseStep{
-			parser.NewFormParseStep(false),
+			parser.NewFormParseStep(onlyProvided),
 		}
 	}
 

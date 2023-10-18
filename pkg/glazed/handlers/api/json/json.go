@@ -1,9 +1,8 @@
-package sse
-
-// Implement a streaming SSE handler
+package json
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/go-go-golems/glazed/pkg/cmds"
 	json2 "github.com/go-go-golems/glazed/pkg/formatters/json"
@@ -12,7 +11,7 @@ import (
 	"github.com/go-go-golems/parka/pkg/glazed/handlers"
 	"github.com/go-go-golems/parka/pkg/glazed/parser"
 	"github.com/rs/zerolog/log"
-	"golang.org/x/sync/errgroup"
+	"io"
 	"net/http"
 )
 
@@ -49,14 +48,14 @@ func WithQueryHandlerParserOptions(options ...parser.ParserOption) QueryHandlerO
 	}
 }
 
-func (h *QueryHandler) Handle(c *gin.Context, writer gin.ResponseWriter) error {
+func (h *QueryHandler) Handle(c *gin.Context, writer io.Writer) error {
 	pc := glazed.NewCommandContext(h.cmd)
 
 	h.contextMiddlewares = append(
 		h.contextMiddlewares,
 		glazed.NewContextParserMiddleware(
 			h.cmd,
-			glazed.NewCommandQueryParser(h.cmd, h.parserOptions...),
+			glazed.NewCommandQueryParser(h.cmd, false, false, h.parserOptions...),
 		),
 	)
 
@@ -67,48 +66,29 @@ func (h *QueryHandler) Handle(c *gin.Context, writer gin.ResponseWriter) error {
 		}
 	}
 
-	c.Header("Content-Type", "text/event-stream")
+	c.Header("Content-Type", "application/json")
 
 	ctx := c.Request.Context()
 	allParameters := pc.GetAllParameterValues()
 	switch cmd := h.cmd.(type) {
 	case cmds.WriterCommand:
-		// Create a writer that on every read amount of bytes sends an sse message
-		// to the client
-		sseWriter := NewSSEWriter()
+		buf := bytes.Buffer{}
+		err := cmd.RunIntoWriter(ctx, pc.ParsedLayers, allParameters, &buf)
+		if err != nil {
+			return err
+		}
 
-		eg := errgroup.Group{}
-		eg.Go(func() error {
-			defer sseWriter.Close()
-			return cmd.RunIntoWriter(
-				ctx,
-				pc.ParsedLayers,
-				pc.ParsedParameters,
-				sseWriter,
-			)
-		})
-
-		eg.Go(func() error {
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case msg, ok := <-sseWriter.ch:
-					if !ok {
-						return nil
-					}
-					// write SSE event to writer
-					s := fmt.Sprintf("data: %s\n\n", msg)
-					_, err := writer.Write([]byte(s))
-					if err != nil {
-						return err
-					}
-					writer.Flush()
-				}
-			}
-		})
-
-		return eg.Wait()
+		foo := struct {
+			Data string `json:"data"`
+		}{
+			Data: buf.String(),
+		}
+		encoder := json.NewEncoder(writer)
+		encoder.SetIndent("", "  ")
+		err = encoder.Encode(foo)
+		if err != nil {
+			return err
+		}
 
 	case cmds.GlazeCommand:
 		gp, err := handlers.CreateTableProcessorWithOutput(pc, "json", "")
@@ -116,39 +96,20 @@ func (h *QueryHandler) Handle(c *gin.Context, writer gin.ResponseWriter) error {
 			return err
 		}
 
+		// remove table middlewares because we are a streaming handler
 		gp.ReplaceTableMiddleware()
-		c := make(chan string, 100)
-		r := row.NewOutputChannelMiddleware(json2.NewOutputFormatter(), c)
-		gp.AddRowMiddleware(r)
+		gp.AddRowMiddleware(row.NewOutputMiddleware(json2.NewOutputFormatter(), writer))
 
-		eg := errgroup.Group{}
-		eg.Go(func() error {
-			err := cmd.Run(ctx, pc.ParsedLayers, allParameters, gp)
-			if err != nil {
-				return err
-			}
-			err = gp.Close(ctx)
-			if err != nil {
-				return err
-			}
-			return nil
-		})
+		if err != nil {
+			return err
+		}
 
-		eg.Go(func() error {
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case row := <-c:
-					_, err := writer.Write([]byte(row))
-					if err != nil {
-						return err
-					}
-				}
-			}
-		})
+		err = cmd.Run(ctx, pc.ParsedLayers, allParameters, gp)
+		if err != nil {
+			return err
+		}
 
-		err = eg.Wait()
+		err = gp.Close(ctx)
 		if err != nil {
 			return err
 		}
@@ -162,10 +123,11 @@ func (h *QueryHandler) Handle(c *gin.Context, writer gin.ResponseWriter) error {
 	default:
 		return &handlers.UnsupportedCommandError{Command: h.cmd}
 	}
+
 	return nil
 }
 
-func CreateQueryHandler(
+func CreateJSONQueryHandler(
 	cmd cmds.Command,
 	parserOptions ...parser.ParserOption,
 ) gin.HandlerFunc {

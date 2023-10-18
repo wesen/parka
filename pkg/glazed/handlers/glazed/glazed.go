@@ -51,7 +51,7 @@ func (h *QueryHandler) Handle(c *gin.Context, writer io.Writer) error {
 		h.contextMiddlewares,
 		glazed.NewContextParserMiddleware(
 			h.cmd,
-			glazed.NewCommandQueryParser(h.cmd, h.parserOptions...),
+			glazed.NewCommandQueryParser(h.cmd, false, false, h.parserOptions...),
 		),
 	)
 

@@ -11,8 +11,13 @@ import (
 
 // QueryParseStep parses parameters from the query string of a request.
 type QueryParseStep struct {
-	onlyDefined bool
+	onlyProvided   bool
+	ignoreRequired bool
 }
+
+// TODO(manuel, 2023-10-17) We need to figure out how to figure out that missing parameters are required
+// This is where we need to collect all validations (not just missing, but invalid) so that we can always
+// display the form filled with values
 
 func (q *QueryParseStep) ParseLayerState(c *gin.Context, state *LayerParseState) error {
 	for _, p := range state.ParameterDefinitions {
@@ -27,6 +32,12 @@ func (q *QueryParseStep) ParseLayerState(c *gin.Context, state *LayerParseState)
 				state.Parameters[p.Name] = pValue
 				continue
 			}
+			if p.Required {
+				if q.ignoreRequired {
+					continue
+				}
+				return errors.Errorf("required parameter '%s' is missing", p.Name)
+			}
 		}
 		value := c.DefaultQuery(p.Name, state.Defaults[p.Name])
 		if parameters.IsFileLoadingParameter(p.Type, value) {
@@ -34,9 +45,12 @@ func (q *QueryParseStep) ParseLayerState(c *gin.Context, state *LayerParseState)
 			// as a placeholder here
 			if value == "" {
 				if p.Required {
+					if q.ignoreRequired {
+						continue
+					}
 					return errors.Errorf("required parameter '%s' is missing", p.Name)
 				}
-				if !q.onlyDefined {
+				if !q.onlyProvided {
 					if _, ok := state.Parameters[p.Name]; !ok {
 						state.Parameters[p.Name] = p.Default
 					}
@@ -52,9 +66,12 @@ func (q *QueryParseStep) ParseLayerState(c *gin.Context, state *LayerParseState)
 		} else {
 			if value == "" {
 				if p.Required {
+					if q.ignoreRequired {
+						continue
+					}
 					return fmt.Errorf("required parameter '%s' is missing", p.Name)
 				}
-				if !q.onlyDefined {
+				if !q.onlyProvided {
 					if p.Type == parameters.ParameterTypeDate {
 						switch v := p.Default.(type) {
 						case string:
@@ -103,8 +120,9 @@ func (q *QueryParseStep) Parse(c *gin.Context, state *LayerParseState) error {
 	return nil
 }
 
-func NewQueryParseStep(onlyDefined bool) ParseStep {
+func NewQueryParseStep(onlyProvided bool, ignoreRequired bool) ParseStep {
 	return &QueryParseStep{
-		onlyDefined: onlyDefined,
+		onlyProvided:   onlyProvided,
+		ignoreRequired: ignoreRequired,
 	}
 }

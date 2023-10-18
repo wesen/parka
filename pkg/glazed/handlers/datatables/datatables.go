@@ -178,7 +178,7 @@ func (qh *QueryHandler) Handle(c *gin.Context, w io.Writer) error {
 		qh.contextMiddlewares,
 		glazed.NewContextParserMiddleware(
 			qh.cmd,
-			glazed.NewCommandQueryParser(qh.cmd, qh.parserOptions...),
+			glazed.NewCommandQueryParser(qh.cmd, false, true, qh.parserOptions...),
 		),
 	)
 

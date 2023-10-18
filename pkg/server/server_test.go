@@ -8,7 +8,7 @@ import (
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/middlewares"
 	"github.com/go-go-golems/glazed/pkg/types"
-	json2 "github.com/go-go-golems/parka/pkg/glazed/handlers/json"
+	json2 "github.com/go-go-golems/parka/pkg/glazed/handlers/api/json"
 	"github.com/go-go-golems/parka/pkg/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
