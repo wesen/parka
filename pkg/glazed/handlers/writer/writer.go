@@ -1,7 +1,6 @@
 package writer
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"github.com/gin-gonic/gin"
@@ -152,23 +151,24 @@ func (qh *QueryHandler) Handle(c *gin.Context, w io.Writer) error {
 		cancel()
 	}()
 	//defer cancel()
-	eg, ctx3 := errgroup.WithContext(ctx2)
+	eg, _ := errgroup.WithContext(ctx2)
 
 	// actually run the command
 	allParameters := pc.GetAllParameterValues()
-	eg.Go(func() error {
-		buf := &bytes.Buffer{}
-		// NOTE(manuel, 2023-10-16) The GetAllParameterValues is a bit of a hack because really what we want is to only get those flags through the layers
-		err := qh.cmd.RunIntoWriter(ctx3, pc.ParsedLayers, allParameters, buf)
-		if err != nil {
-			return err
-		}
-
-		s := buf.String()
-		log.Info().Str("data", s).Msg("data from command")
-
-		return nil
-	})
+	// TODO(manuel, 2023-10-20) Actually run the command
+	//eg.Go(func() error {
+	//	buf := &bytes.Buffer{}
+	//	// NOTE(manuel, 2023-10-16) The GetAllParameterValues is a bit of a hack because really what we want is to only get those flags through the layers
+	//	err := qh.cmd.RunIntoWriter(ctx3, pc.ParsedLayers, allParameters, buf)
+	//	if err != nil {
+	//		return err
+	//	}
+	//
+	//	s := buf.String()
+	//	log.Info().Str("data", s).Msg("data from command")
+	//
+	//	return nil
+	//})
 
 	eg.Go(func() error {
 		// if qh.Cmd implements cmds.CommandWithMetadata, get Metadata
