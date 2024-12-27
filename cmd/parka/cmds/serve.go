@@ -17,6 +17,7 @@ import (
 	"github.com/go-go-golems/parka/pkg/render"
 	"github.com/go-go-golems/parka/pkg/server"
 	"github.com/go-go-golems/parka/pkg/utils/fs"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +27,12 @@ var ServeCmd = &cobra.Command{
 	Short: "Starts the server",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Configure zerolog
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout}).
+			With().
+			Caller().
+			Logger()
+
 		port, err := cmd.Flags().GetUint16("port")
 		cobra.CheckErr(err)
 		host, err := cmd.Flags().GetString("host")
@@ -75,7 +82,10 @@ var ServeCmd = &cobra.Command{
 		// implemented as part of sqleton serve
 		s.Router.GET("/api/example", json2.CreateJSONQueryHandler(NewExampleCommand()))
 		s.Router.GET("/example", datatables.CreateDataTablesHandler(NewExampleCommand(), "", "example"))
-		s.Router.GET("/example-htmx", htmx.CreateFormHandler(NewExampleCommand()))
+		g := s.Router.Group("/example-htmx")
+		formHandler := htmx.NewFormHandler(NewExampleCommand())
+		formHandler.RegisterRoutes(g)
+
 		s.Router.GET("/download/example.csv", output_file.CreateGlazedFileHandler(NewExampleCommand(), "example.csv"))
 
 		ctx, cancel := context.WithCancel(context.Background())

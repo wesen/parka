@@ -18,3 +18,4 @@ dist/
 # Editor files
 .history
 
+__debug*

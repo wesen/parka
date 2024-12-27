@@ -34,7 +34,7 @@
         </details>
     {{ end }}
 
-    <form hx-get="{{.Command.Name}}" 
+    <form hx-get="submit" 
           hx-target="#results"
           hx-trigger="submit"
           hx-indicator="#spinner">
@@ -43,7 +43,10 @@
             <div class="card mb-4 {{$section.Classes}}" {{if $section.Style}}style="{{$section.Style}}"{{end}}>
                 <div class="card-body">
                     {{if $section.Title}}<h3>{{$section.Title}}</h3>{{end}}
-                    {{if $section.Description}}<p>{{$section.Description}}</p>{{end}}
+                    {{if $section.ShortDescription}}<p>{{$section.ShortDescription}}</p>{{end}}
+                        {{ if $section.LongDescription }}
+                            <p>{{$section.LongDescription }}</p>
+                        {{end}}
 
                     {{ range $row := $section.Rows }}
                         <div class="row mb-3 {{$row.Classes}}" {{if $row.Style}}style="{{$row.Style}}"{{end}}>

@@ -1,0 +1,11 @@
+<div id="results" class="mt-4">
+    {{ range .ErrorStream }}
+        <div class="alert alert-danger">
+            <strong>Error:</strong> {{.}}
+        </div>
+    {{ end }}
+
+    {{ range .ResultStream }}
+        <div class="result-item">{{.}}</div>
+    {{ end }}
+</div> 
