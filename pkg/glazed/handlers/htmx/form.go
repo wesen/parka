@@ -149,7 +149,7 @@ func (h *FormHandler) HandleForm(c echo.Context) error {
 	err := middlewares.ExecuteMiddlewares(description.Layers, parsedLayers,
 		append(
 			h.middlewares,
-			parka_middlewares.UpdateFromQueryParameters(c, nil),
+			parka_middlewares.UpdateFromQueryParameters(c),
 			middlewares.SetFromDefaults(),
 		)...,
 	)

@@ -10,6 +10,29 @@
     
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- HTMX URL Parameters Extension -->
+    <script>
+        htmx.defineExtension('push-url-w-params', {
+            onEvent: function(name, e) {
+                if (name === "htmx:configRequest") {
+                    const path = e.target.getAttribute('data-push-url')
+                    const params = new URLSearchParams(e.detail.parameters).toString()
+                    if (path !== "" && path !== undefined) {
+                        const url = path.startsWith('/') 
+                            ? `${window.location.origin}${path}?${params}` 
+                            : `${window.location.pathname}${path}?${params}`
+                        console.log("pushing url", url)
+                        window.history.pushState({}, '', url);
+                    } else {
+                        const url = `${window.location.pathname}?${params}`
+                        console.log("pushing url", url)
+                        window.history.pushState({}, '', url);
+                    }
+                } 
+            }
+        });
+    </script>
 </head>
 <body>
 <div class="container py-4">
@@ -37,6 +60,8 @@
     <form hx-get="submit" 
           hx-target="#results"
           hx-trigger="submit"
+          hx-ext="push-url-w-params"
+          data-push-url=""
           hx-indicator="#spinner">
         
         {{ range $section := .Layout.Sections }}
