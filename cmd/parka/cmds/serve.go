@@ -3,9 +3,15 @@ package cmds
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+	"os/signal"
+
 	"github.com/go-go-golems/glazed/pkg/cli"
 	"github.com/go-go-golems/glazed/pkg/types"
 	"github.com/go-go-golems/parka/pkg/glazed/handlers/datatables"
+	"github.com/go-go-golems/parka/pkg/glazed/handlers/htmx"
 	json2 "github.com/go-go-golems/parka/pkg/glazed/handlers/json"
 	output_file "github.com/go-go-golems/parka/pkg/glazed/handlers/output-file"
 	"github.com/go-go-golems/parka/pkg/render"
@@ -13,10 +19,6 @@ import (
 	"github.com/go-go-golems/parka/pkg/utils/fs"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
-	"io"
-	"net/http"
-	"os"
-	"os/signal"
 )
 
 var ServeCmd = &cobra.Command{
@@ -73,6 +75,7 @@ var ServeCmd = &cobra.Command{
 		// implemented as part of sqleton serve
 		s.Router.GET("/api/example", json2.CreateJSONQueryHandler(NewExampleCommand()))
 		s.Router.GET("/example", datatables.CreateDataTablesHandler(NewExampleCommand(), "", "example"))
+		s.Router.GET("/example-htmx", htmx.CreateFormHandler(NewExampleCommand()))
 		s.Router.GET("/download/example.csv", output_file.CreateGlazedFileHandler(NewExampleCommand(), "example.csv"))
 
 		ctx, cancel := context.WithCancel(context.Background())
