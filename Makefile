@@ -52,3 +52,11 @@ bump-glazed:
 install:
 	go build -o ./dist/parka ./cmd/parka && \
 		cp ./dist/parka $(shell which parka)
+
+.PHONY: logcopter-generate
+logcopter-generate:
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.parka -strip-prefix github.com/go-go-golems/parka ./cmd/... ./pkg/...
+
+.PHONY: logcopter-check
+logcopter-check:
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.parka -strip-prefix github.com/go-go-golems/parka -check ./cmd/... ./pkg/...
