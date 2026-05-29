@@ -77,5 +77,9 @@ glazed-lint-build:
 		GOBIN=$(dir $(GLAZED_LINT_BIN)) go install $(GLAZED_LINT_PKG); \
 	fi
 
+# Serve command flags and SSM/config environment helpers predate the Glazed CLI
+# policy; keep them explicitly scoped while preserving the rollout gate.
+GLAZED_LINT_ALLOW_PATHS ?= cmd/parka/cmds/serve.go,pkg/handlers/config/
+
 glazed-lint: glazed-lint-build
-	GOWORK=off go vet -vettool=$(GLAZED_LINT_BIN) ./cmd/... ./pkg/...
+	GOWORK=off go vet -vettool=$(GLAZED_LINT_BIN) -glazedclilint.allow-paths=$(GLAZED_LINT_ALLOW_PATHS) ./cmd/... ./pkg/...
